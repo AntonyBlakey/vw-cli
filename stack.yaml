@@ -1,0 +1,8 @@
+flags: {}
+extra-package-dbs: []
+packages:
+- '.'
+extra-deps:
+- Plural-0.0.2
+- text-1.2.2.0
+resolver: lts-5.3

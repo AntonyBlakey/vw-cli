@@ -109,12 +109,13 @@ fuzzyLookup searchTerm list = do
 
     chooseFromList :: M.Nameable a => [a] -> IO a
     chooseFromList choices = do
-      mapM_ putStrLn =<< T.format <$> zipWithM choiceRow [0..] choices
-      putStr $ "Enter a " ++ termName ++ " number : "
+      mapM_ putStrLn =<< T.format <$> zipWithM choiceRow [1..] choices
+      putStr $ "Select " ++ termName ++ " number (1 .. " ++ show (length choices) ++ ") or 0 to quit : "
       hFlush stdout
       input <- getLine
       case readMaybe input of
-        (Just x) | 0 <= x && x < length choices -> pure $ choices !! x
+        (Just x) | x == 0                       -> die ""
+                 | 0 < x && x <= length choices -> pure $ choices !! (x - 1)
         _                                       -> chooseFromList choices
 
     choiceRow :: M.Nameable a => Int -> a -> IO T.Row

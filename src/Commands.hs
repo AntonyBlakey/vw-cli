@@ -65,14 +65,14 @@ removeReleaseTag root tagName =
 
 
 createImage :: M.Release -> String -> M.Width -> IO ()
-createImage release newImageName width =
-  let srcFilePath = M.path release </> "release" </> "image" </> if width == M.Width32 then "visual.im" else "visual64.im"
-      destDir = M.path release </> "images" </> newImageName
-      destFilePath = destDir </> if width == M.Width32 then "visual32.im" else "visual64.im"
-  in do
-    createDirectoryIfMissing True destDir
-    copyFile srcFilePath destFilePath
-    setPermissions destFilePath =<< setOwnerWritable True <$> getPermissions destFilePath
+createImage release newImageName width = do
+  createDirectoryIfMissing True destDir
+  copyFile srcFilePath destFilePath
+  setPermissions destFilePath =<< setOwnerWritable True <$> getPermissions destFilePath
+  where
+    srcFilePath = M.path release </> "release" </> "image" </> if width == M.Width32 then "visual.im" else "visual64.im"
+    destDir = M.path release </> "images" </> newImageName
+    destFilePath = destDir </> if width == M.Width32 then "visual32.im" else "visual64.im"
 
 
 copyImage :: M.Image -> String -> IO ()
@@ -125,6 +125,7 @@ runImage image _maybeHost maybeScript = do
       time <- getCurrentTime
       let header = T.format
             [ T.Body [ "Image", M.name image ]
+            , T.Body [ "Width", if width == M.Width32 then "32 bit" else "64 bit" ]
             , T.Body [ "Release", M.name release ]
             , case maybeScript of
                 Just script -> T.Body [ "Script", M.name script ]

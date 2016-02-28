@@ -72,6 +72,7 @@ createImage release newImageName width =
   in do
     createDirectoryIfMissing True destDir
     copyFile srcFilePath destFilePath
+    setPermissions destFilePath =<< setOwnerWritable True <$> getPermissions destFilePath
 
 
 copyImage :: M.Image -> String -> IO ()

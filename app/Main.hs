@@ -1,8 +1,8 @@
-{-# LANGUAGE QuasiQuotes         #-}
+{-# LANGUAGE QuasiQuotes #-}
 module Main where
 
 import qualified Commands                as C
-import           Control.Monad           (filterM, when, zipWithM_, (<=<))
+import           Control.Monad           (filterM, when, zipWithM)
 import           Control.Monad.Extra     (findM)
 import           Data.Maybe              (fromJust)
 import           Data.Typeable           (Typeable, typeOf, typeRepArgs)
@@ -11,6 +11,8 @@ import qualified Model                   as M
 import           System.Console.Docopt
 import           System.Environment      (getArgs, lookupEnv)
 import           System.Exit             (die)
+import           System.IO               (hFlush, stdout)
+import qualified Table                   as T
 import           Text.Read               (readMaybe)
 
 usageText :: Docopt
@@ -47,10 +49,10 @@ main = do
       getLongOption = getArg args . longOption
       cmd @@ action = when (hasCommand cmd) action
       requiredEnvVar name = do
-        maybeValue <- lookupEnv name
-        case maybeValue of
-          Nothing -> die $ "The environment variable " ++ name ++ " is not defined."
+        value <- lookupEnv name
+        case value of
           Just val -> pure val
+          Nothing -> die $ "The environment variable " ++ name ++ " is not defined."
 
   -- Specific to this app, all lazy so not resolved until used in a command
 
@@ -58,8 +60,8 @@ main = do
       image         = fuzzyLookup (getRequiredArg "image-name") =<< M.images =<< root
       release       = fuzzyLookup (getRequiredArg "release-name") =<< M.releases =<< root
       backup        = fuzzyLookup (getRequiredArg "backup-name") =<< M.backups =<< image
-      maybeScript   = traverse (\n -> fuzzyLookup n =<< M.scripts =<< root) (getLongOption "script-name")
-      maybeHost     = pure $ getLongOption "host-name" -- TODO: hosts should be a type
+      maybeScript   = traverse (\n -> fuzzyLookup n =<< M.scripts =<< root) (getLongOption "script")
+      maybeHost     = pure $ getLongOption "host" -- TODO: hosts should be a type
       newImageName  = uniqueName (getRequiredArg "new-image-name") =<< M.images =<< root
       newBackupName = getRequiredArg "new-backup-name"
       tagName       = getRequiredArg "tag-name"
@@ -90,13 +92,13 @@ fuzzyLookup searchTerm list = do
     Nothing -> do
       results <- filterM (fmap (any (fuzzyEq searchTerm)) . M.identifiers) list
       case length results of
-        0 -> die $ "\"" ++ searchTerm ++ "\" matches no " ++ termName
+        0 -> die $ "\"" ++ searchTerm ++ "\" matches no " ++ plural termName
         1 -> pure $ head results
         _ -> chooseFromList results
 
   where
 
-    termName = plural $ nameOfListMemberType list
+    termName = nameOfListMemberType list
 
     fuzzyEq :: String -> String -> Bool
     fuzzyEq "*" _ = True
@@ -107,15 +109,16 @@ fuzzyLookup searchTerm list = do
 
     chooseFromList :: M.Nameable a => [a] -> IO a
     chooseFromList choices = do
-      putStrLn $ "Select from the following " ++ termName ++ ":"
-      zipWithM_  printChoice [0..] choices
+      mapM_ putStrLn =<< T.format <$> zipWithM choiceRow [0..] choices
+      putStr $ "Enter a " ++ termName ++ " number : "
+      hFlush stdout
       input <- getLine
       case readMaybe input of
         (Just x) | 0 <= x && x < length choices -> pure $ choices !! x
         _                                       -> chooseFromList choices
 
-    printChoice :: M.Nameable a => Int -> a -> IO ()
-    printChoice index = putStrLn . ((show index ++ ") ") ++) . unwords <=< M.identifiers
+    choiceRow :: M.Nameable a => Int -> a -> IO T.Row
+    choiceRow index = fmap (\ids -> T.Body [ show index, unwords ids ]) . M.identifiers
 
 
 uniqueName :: M.Nameable a => String -> [a] -> IO String

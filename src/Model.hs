@@ -1,12 +1,12 @@
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Model
     (
       Nameable
     , Root(..), Release, Image, Backup, Script
     , Width(..), Platform(..)
     , releases, images, backups, scripts
-    , path, name, identifiers, tags, root, devCycle, release, image, width, visualExecutable, timestamp
+    , path, root, relativePath, name, tags, identifiers
+    , devCycle, release, image, width, visualExecutable, timestamp
     , rewritePathForVM, addTag, removeTag
     ) where
 
@@ -22,17 +22,17 @@ import           System.FilePath
 data Width = Width32 | Width64 deriving (Eq, Show)
 data Platform = OSX | Windows | Linux deriving (Eq, Show)
 
-newtype Root = Root FilePath deriving (Eq, Show, Typeable, Pathish)
-newtype Release = Release FilePath deriving (Eq, Show, Typeable, Pathish)
-newtype Image =  Image FilePath deriving (Eq, Show, Typeable, Pathish)
-newtype Backup = Backup FilePath deriving (Eq, Show, Typeable, Pathish)
-newtype Script = Script FilePath deriving (Eq, Show, Typeable, Pathish)
+newtype Root    = Root    { rootPath    :: FilePath } deriving (Eq, Show, Typeable)
+newtype Release = Release { releasePath :: FilePath } deriving (Eq, Show, Typeable)
+newtype Image   = Image   { imagePath   :: FilePath } deriving (Eq, Show, Typeable)
+newtype Backup  = Backup  { backupPath  :: FilePath } deriving (Eq, Show, Typeable)
+newtype Script  = Script  { scriptPath  :: FilePath } deriving (Eq, Show, Typeable)
 
 class Pathish a where
   path :: a -> FilePath
-
-instance Pathish FilePath where
-  path = id
+  root :: a -> Root
+  relativePath :: a -> FilePath
+  relativePath this = makeRelative (path $ root $ this) (path $ this)
 
 class (Pathish a, Typeable a) => Nameable a where
   name :: a -> String
@@ -54,6 +54,10 @@ rewritePathForVM = undefined
 
 -- Root
 
+instance Pathish Root where
+  path = rootPath
+  root = id
+
 releases :: Root -> IO [Release]
 releases = fmap (map Release) . directories . (</> "releases") . path
 
@@ -66,6 +70,10 @@ scripts = fmap (map Script . filter ((== ".st") . takeExtension)) . files . (</>
 
 -- Release
 
+instance Pathish Release where
+  path = releasePath
+  root = Root . takeDirectory . takeDirectory . path
+
 instance Nameable Release where
   tags = fmap (map (drop 1 . takeExtensions) . filter ((== "tag") . takeFileName . dropExtensions)) . files . path
 
@@ -73,10 +81,7 @@ instance ImageContainer Release where
   images = fmap (map Image) . directories . (</> "images") . path
 
 devCycle :: Release -> String
-devCycle = name
-
-root :: Release -> Root
-root = Root . takeDirectory . path
+devCycle = takeWhile (/= '-') . name
 
 visualExecutable :: Release -> Platform -> Width -> FilePath
 visualExecutable r OSX Width32 = foldl (</>) (path r) ["release", "bin", "macx", "visual.app", "Contents", "MacOS", "visual"]
@@ -101,6 +106,10 @@ removeTag rls tagName = do
 
 -- Image
 
+instance Pathish Image where
+  path = imagePath
+  root = root . release
+
 instance Nameable Image
 
 release :: Image -> Release
@@ -115,6 +124,10 @@ backups = fmap (map Backup) . directories . (</> "backups") . path
 
 -- Backup
 
+instance Pathish Backup where
+  path = backupPath
+  root = root . image
+
 instance Nameable Backup where
   name = drop 1 . takeExtensions . path
   tags backup = pure [show $ timestamp backup]
@@ -127,6 +140,10 @@ timestamp backup = parseTimeOrError False defaultTimeLocale "%Y-%m-%d-%H-%M-%S" 
 
 
 -- Script
+
+instance Pathish Script where
+  path = scriptPath
+  root = Root . takeDirectory . takeDirectory . path
 
 instance Nameable Script where
   name = takeFileName . path

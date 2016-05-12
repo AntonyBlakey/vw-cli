@@ -26,6 +26,9 @@ library
                      , process
                      , extra
                      , text
+                     , json-builder
+                     , bytestring
+                     , containers
   default-language:    Haskell2010
 
 executable vw

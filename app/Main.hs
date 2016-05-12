@@ -18,6 +18,7 @@ import           Text.Read               (readMaybe)
 usageText :: Docopt
 usageText = [docopt|
 Usage:
+  vw-cli model
   vw-cli releases
   vw-cli images
   vw-cli add-tag <tag-name> <release-name>
@@ -54,7 +55,7 @@ main = do
           Just val -> pure val
           Nothing -> die $ "The environment variable " ++ name ++ " is not defined."
 
-  -- Specific to this app, all lazy so not resolved until used in a command
+  -- Specific to this app, all lazy so not resolved until the value is used in a command
 
   let root          = M.Root <$> requiredEnvVar "VW_CLI_ROOT"
       image         = fuzzyLookup (getRequiredArg "image-name") =<< M.images =<< root
@@ -67,6 +68,7 @@ main = do
       tagName       = getRequiredArg "tag-name"
       width         = if hasCommand "32" then M.Width32 else M.Width64
 
+  "model"      @@ do r <- root    ; C.listModel r
   "releases"   @@ do r <- root    ; C.listReleases r
   "images"     @@ do r <- root    ; C.listImages r
   "remove-tag" @@ do r <- root    ; C.removeReleaseTag r tagName

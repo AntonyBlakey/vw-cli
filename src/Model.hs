@@ -1,7 +1,7 @@
-{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Model
     (
-      Nameable
+      Nameable, Pathish
     , Root(..), Release, Image, Backup, Script
     , Width(..), Platform(..)
     , releases, images, backups, scripts
@@ -19,20 +19,25 @@ import           System.Directory
 import           System.FilePath
 
 
-data Width = Width32 | Width64 deriving (Eq, Show)
+data Width = Width32 | Width64 deriving (Eq)
+instance Show Width where
+  show x = if x == Width32 then "32" else "64"
+
 data Platform = OSX | Windows | Linux deriving (Eq, Show)
 
-newtype Root    = Root    { rootPath    :: FilePath } deriving (Eq, Show, Typeable)
+newtype Root    = Root    { rootPath :: FilePath } deriving (Eq, Show, Typeable)
 newtype Release = Release { releasePath :: FilePath } deriving (Eq, Show, Typeable)
-newtype Image   = Image   { imagePath   :: FilePath } deriving (Eq, Show, Typeable)
-newtype Backup  = Backup  { backupPath  :: FilePath } deriving (Eq, Show, Typeable)
-newtype Script  = Script  { scriptPath  :: FilePath } deriving (Eq, Show, Typeable)
+newtype Image   = Image   { imagePath :: FilePath } deriving (Eq, Show, Typeable)
+newtype Backup  = Backup  { backupPath :: FilePath } deriving (Eq, Show, Typeable)
+newtype Script  = Script  { scriptPath :: FilePath } deriving (Eq, Show, Typeable)
+
 
 class Pathish a where
   path :: a -> FilePath
   root :: a -> Root
   relativePath :: a -> FilePath
-  relativePath this = makeRelative (path $ root $ this) (path $ this)
+  relativePath this = makeRelative (path $ root this) (path this)
+
 
 class (Pathish a, Typeable a) => Nameable a where
   name :: a -> String
@@ -41,6 +46,7 @@ class (Pathish a, Typeable a) => Nameable a where
   tags _ = pure []
   identifiers :: a -> IO [String]
   identifiers a = (name a :) <$> tags a
+
 
 class ImageContainer a where
   images :: a -> IO [Image]

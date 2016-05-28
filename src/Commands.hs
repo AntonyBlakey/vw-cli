@@ -13,11 +13,11 @@ module Commands
        , runImage
        ) where
 
+import           Control.Applicative       (liftA2)
 import           Control.Monad             (forM_)
 import qualified Data.ByteString           as BS
 import qualified Data.Json.Builder         as J
 import           Data.List                 (sortOn)
-import           Data.Monoid               ((<>))
 import qualified Data.Text                 as Text
 import qualified Data.Text.IO              as Text.IO
 import           Data.Time.Clock           (getCurrentTime)
@@ -49,9 +49,6 @@ listModel root = BS.putStrLn . J.toJsonBS =<< rootAsJson root
       v' <- accessor value
       pure $ if v' == "" then mempty else J.row name v'
 
-    mergeFields :: [a -> IO J.Object] -> a -> IO J.Object
-    mergeFields elems obj = mconcat <$> (sequence $ map ($ obj) elems)
-
     -- Actual Fields
 
     nameField :: M.Nameable a => a -> IO J.Object
@@ -71,11 +68,19 @@ listModel root = BS.putStrLn . J.toJsonBS =<< rootAsJson root
 
     -- Object types
 
+    -- This is the most generic form, but is it too opaque?
+    -- The field helper functions above also are more generic than their signatures indicate.
+    mergeFields :: (Foldable f, Applicative a, Monoid m) => f (c -> a m) -> c -> a m
+    mergeFields f c = foldr (\x -> liftA2 mappend (x c)) (pure mempty) f
+
+    -- mergeFields :: [a -> IO J.Object] -> a -> IO J.Object
+    -- mergeFields elems obj = mconcat <$> mapM ($ obj) elems
+
     rootAsJson    = mergeFields [releasesField, scriptsField]
+    scriptAsJson  = mergeFields [nameField, pathField]
     releaseAsJson = mergeFields [nameField, pathField, tagsField, imagesField]
     imageAsJson   = mergeFields [nameField, pathField, widthField, backupsField]
     backupAsJson  = mergeFields [nameField, timestampField]
-    scriptAsJson  = mergeFields [nameField, pathField]
 
 
 listReleases :: M.Root -> IO ()
@@ -87,6 +92,8 @@ listReleases root =
       tags <- M.tags release
       let releaseFragment = [M.name release, unwords tags]
       let imageFormatter i = (\width -> [M.name i, " " ++ show width]) <$> M.width i
+      -- The following appeals, but the effect isn't as immediately obvious
+      -- let imageFormatter i = (M.name i :) . (: []) . (" " ++) . show <$> M.width i
       imageFragments <- mapM imageFormatter . sortOn M.name =<< M.images release
       pure $ T.Separator : if null imageFragments then [T.Body releaseFragment] else map (T.Body . (releaseFragment ++)) imageFragments
 
@@ -178,8 +185,8 @@ runImage image _maybeHost maybeScript = do
             , T.Body [ "Width", show width ++ " bit" ]
             , T.Body [ "Release", M.name release ]
             , case maybeScript of
+                Nothing     -> T.Empty
                 Just script -> T.Body [ "Script", M.name script ]
-                _           -> T.Empty
             , T.Body [ "Time", show time ]
             ]
       forM_ header $ hPutStrLn handle . ("echo '" ++) . (++ "'")
